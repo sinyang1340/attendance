@@ -134,6 +134,11 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
     samsung: /SamsungBrowser/i.test(ua),
     iosOther: /CriOS|EdgiOS|FxiOS|Whale/i.test(ua)
   };
+  // 안드로이드 진짜 Chrome인지 (삼성 인터넷·네이버·웨일·카톡 등 안의 브라우저 제외)
+  dev.androidChrome = dev.android && /Chrome\/\d/.test(ua) &&
+    !/SamsungBrowser|EdgA|OPR\/|Whale|NAVER|KAKAOTALK|DaumApps|Instagram|FBAN|FBAV|Line\/|BAND\/|; wv\)|YaBrowser|MiuiBrowser|HeyTapBrowser|UCBrowser/i.test(ua);
+  // 안드로이드는 Chrome에서만 설치·등록 (삼성 인터넷으로 설치하면 Play 프로텍트가 앱을 막음)
+  dev.needChrome = dev.android && !dev.androidChrome;
   function standalone() {
     return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
   }
@@ -142,9 +147,44 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
   function setHomeAdded() { try { localStorage.setItem(HOME_KEY, "1"); } catch (e) {} }
   // 아이폰은 홈 화면 앱과 Safari가 저장 공간을 따로 써서, 홈 화면 앱 안에서 등록해야 함
   function iosMustInstallFirst() { return dev.ios && !standalone() && !dev.inapp && !state.skipInstall; }
+  // 안드로이드에서 Chrome이 아닌 곳(카톡, 삼성 인터넷 등)에서 열렸으면 Chrome으로 옮겨야 함
+  function mustMoveBrowser() { return !standalone() && !state.skipInstall && (dev.needChrome || dev.inapp); }
 
-  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); state.installPrompt = e; render(); });
-  window.addEventListener("appinstalled", function () { setHomeAdded(); state.installPrompt = null; state.sheet = false; toast("설치했습니다. 홈 화면의 ‘NK근태’ 아이콘으로 여세요."); render(); });
+  function chromeIntent() {
+    return "intent://" + APP_URL.replace(/^https?:\/\//, "") + "#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=" +
+      encodeURIComponent("https://play.google.com/store/apps/details?id=com.android.chrome") + ";end";
+  }
+  function externalUrl() {
+    if (dev.android) return chromeIntent();
+    if (dev.ios && dev.kakao) return "kakaotalk://web/openExternal?url=" + encodeURIComponent(APP_URL);
+    return "";
+  }
+  /* 카톡·삼성 인터넷 등으로 열리면 자동으로 Chrome(아이폰은 Safari)을 엶. 한 번만 시도하고, 안 되면 버튼으로 안내 */
+  (function autoMove() {
+    if (standalone() || !(dev.needChrome || (dev.ios && dev.kakao))) return;
+    var target = externalUrl();
+    if (!target) return;
+    try { if (sessionStorage.getItem("att_moved")) return; sessionStorage.setItem("att_moved", "1"); } catch (e) {}
+    setTimeout(function () { location.href = target; }, 50);
+  })();
+
+  /* 설치 창: Chrome이 '설치 가능' 신호를 주면 저장해 두었다가 버튼을 누를 때 띄움 */
+  var promptWaiters = [];
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault(); state.installPrompt = e; state.promptUsed = false;
+    promptWaiters.splice(0).forEach(function (f) { f(e); });
+    render();
+  });
+  window.addEventListener("appinstalled", function () { setHomeAdded(); state.installPrompt = null; state.sheet = false; state.installed = true; toast("설치했습니다. 홈 화면의 ‘NK근태’ 아이콘으로 여세요."); render(); });
+  function waitPrompt(ms) {
+    if (state.installPrompt) return Promise.resolve(state.installPrompt);
+    return new Promise(function (res) { promptWaiters.push(res); setTimeout(function () { res(state.installPrompt); }, ms); });
+  }
+  function checkInstalled() {
+    if (!navigator.getInstalledRelatedApps) return Promise.resolve(false);
+    return navigator.getInstalledRelatedApps().then(function (a) { return a && a.length > 0; }, function () { return false; });
+  }
+  checkInstalled().then(function (yes) { if (yes) { state.installed = true; render(); } });
 
   /* ---------- 기기 코드 ---------- */
   function deviceCode() {
@@ -230,11 +270,15 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
         h("p", { class: "muted", text: "이 휴대폰을 기억할 수 없는 상태입니다. 시크릿(비공개) 모드를 끄거나, Chrome 또는 Safari에서 다시 열어 주세요." })));
       return;
     }
-    if (dev.inapp) app.appendChild(inAppBox());
+    var move = mustMoveBrowser();
+    if (move) app.appendChild(inAppBox());
     if (!state.loaded) {
       app.appendChild(h("section", { class: "panel" }, h("div", { class: "empty", text: "불러오는 중…" })));
     } else if (!state.data) {
-      if (iosMustInstallFirst()) app.appendChild(iosInstallFirst());
+      // 다른 브라우저로 옮겨야 하면 여기서는 등록하지 않게 함 (등록하면 Chrome·앱에서 다른 휴대폰으로 인식됨)
+      if (move) app.appendChild(h("div", { style: "text-align:center" },
+        h("button", { class: "btn ghost", onclick: function () { state.skipInstall = true; render(); } }, "그래도 이 브라우저에서 쓰기")));
+      else if (iosMustInstallFirst()) app.appendChild(iosInstallFirst());
       else app.appendChild(registerView());
     } else {
       app.appendChild(punchView());
@@ -313,22 +357,46 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
   /* ---------- 앱 설치 ---------- */
   /* 설치된 앱으로 열었을 때만 숨기고, 브라우저로 열었으면 휴대폰에서는 항상 보여 줌 */
   function showInstall() {
-    return !dev.inapp && !standalone() && (dev.ios || dev.android || !!state.installPrompt);
+    return !dev.inapp && !dev.needChrome && !standalone() && (dev.ios || dev.android || !!state.installPrompt);
   }
   function installButton() {
-    return h("button", { class: "install", onclick: openInstall },
+    var sub = state.installing ? "설치 창을 준비하는 중…"
+      : state.installed ? "이미 설치되어 있습니다 · 홈 화면의 NK근태로 여세요"
+      : state.installPrompt ? "누르면 바로 설치됩니다"
+      : state.dismissed ? "다시 누르면 설치 창이 열립니다"
+      : dev.androidChrome ? "누르면 설치 창이 열립니다"
+      : "누르면 설치 방법을 보여 드립니다";
+    return h("button", { class: "install", onclick: openInstall, disabled: !!state.installing },
       h("img", { src: "icons/icon-192.png", alt: "" }),
-      h("span", {}, "NK근태 앱 설치", h("small", { text: state.installPrompt ? "누르면 바로 설치됩니다" : "누르면 설치 방법을 보여 드립니다" })));
+      h("span", {}, "NK근태 앱 설치", h("small", { text: sub })));
   }
+  /* 안드로이드 Chrome: 항상 설치 창(‘설치할까요?’)을 띄움. 띄울 수 없을 때만 방법 안내 */
   function openInstall() {
-    if (state.installPrompt) {
-      var p = state.installPrompt;
-      state.installPrompt = null;
-      p.prompt();
-      p.userChoice.then(function (c) { if (c && c.outcome === "accepted") setHomeAdded(); render(); }).catch(function () {});
+    if (state.installing) return;
+    if (state.installed) { state.sheet = "installed"; render(); return; }
+    function go(p) {
+      if (p && !state.promptUsed) {
+        state.promptUsed = true;
+        try { p.prompt(); } catch (e) { state.sheet = "guide"; render(); return; }
+        p.userChoice.then(function (c) {
+          state.installPrompt = null;
+          if (c && c.outcome === "accepted") { setHomeAdded(); state.installed = true; }
+          else state.dismissed = true; // 취소하면 다음에 누를 때 새로 고쳐서 다시 띄움
+          render();
+        }).catch(function () {});
+        return;
+      }
+      if (dev.androidChrome && state.dismissed) { location.reload(); return; } // Chrome은 한 번 취소한 창을 같은 화면에서 다시 못 띄움
+      checkInstalled().then(function (yes) { state.installed = yes; state.sheet = yes ? "installed" : "guide"; render(); });
+    }
+    if (state.installPrompt) { go(state.installPrompt); return; }
+    if (dev.androidChrome && !state.dismissed) {
+      // 화면을 연 직후엔 Chrome의 ‘설치 가능’ 신호가 조금 늦게 올 수 있어 잠깐 기다림
+      state.installing = true; render();
+      waitPrompt(2500).then(function (p) { state.installing = false; render(); go(p); });
       return;
     }
-    state.sheet = true; render();
+    go(null);
   }
   function closeSheet() { state.sheet = false; render(); }
 
@@ -346,10 +414,6 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
   function installSheet() {
     var steps;
     if (dev.ios) steps = iosSteps();
-    else if (dev.samsung) steps = [
-      ["주소창 오른쪽에 ", key("⤓ 설치"), " 아이콘이 보이면 누르고 ", key("설치"), "를 누르세요. 그러면 끝입니다."],
-      ["아이콘이 없으면 화면 아래쪽 ", key("메뉴", "menu"), " 버튼 → ", key("현재 페이지 추가"), " → ", key("홈 화면"), "을 누르세요."],
-      [key("추가"), "를 누르세요."]];
     else if (dev.android) steps = [
       ["화면 오른쪽 위 ", key("", "dots"), " 버튼을 누르세요."],
       ["메뉴에서 ", key("앱 설치"), "를 누르세요. 없으면 ", key("홈 화면에 추가"), "를 누르세요."],
@@ -358,7 +422,8 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
       ["휴대폰에서 이 주소를 Safari(아이폰) 또는 Chrome(안드로이드)으로 여세요."],
       ["브라우저 메뉴에서 ", key("앱 설치"), " 또는 ", key("홈 화면에 추가"), "를 누르세요."]];
     var sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": "sheetTitle" },
-      h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h2", { id: "sheetTitle", text: "NK근태 앱 설치하기" })),
+      h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h2", { id: "sheetTitle", text: state.sheet === "installed" ? "이미 설치되어 있습니다" : "NK근태 앱 설치하기" })),
+      state.sheet === "installed" ? h("p", { style: "margin:0", text: "이 휴대폰에는 NK근태 앱이 이미 있습니다. 홈 화면이나 앱 목록에서 ‘NK근태’를 눌러 여세요. 앱이 안 보이면 아래 방법으로 다시 설치하세요." }) : null,
       h("ol", { class: "steps" }, steps.map(stepItem)),
       h("p", { class: "muted small", style: "margin:0", text: "설치하면 홈 화면의 ‘NK근태’ 아이콘으로 주소창 없이 바로 열립니다. 이미 설치했다면 홈 화면이나 앱 목록에서 ‘NK근태’를 찾아 여세요." }),
       h("div", { class: "row" },
@@ -367,17 +432,20 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
   }
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && state.sheet) closeSheet(); });
 
+  /* 카톡·삼성 인터넷 등에서 열렸을 때: Chrome(아이폰은 Safari)으로 옮기는 안내 */
   function inAppBox() {
-    var ext = dev.kakao ? "kakaotalk://web/openExternal?url=" + encodeURIComponent(APP_URL)
-      : dev.android ? "intent://" + APP_URL.replace(/^https?:\/\//, "") + "#Intent;scheme=https;package=com.android.chrome;end" : "";
-    var browser = dev.ios ? "Safari" : "Chrome";
-    var box = h("div", { class: "urlbox", text: APP_URL });
+    var ext = externalUrl();
+    var browser = dev.ios ? "Safari로" : "Chrome으로";
+    var where = dev.kakao ? "카카오톡 안에서" : dev.samsung ? "삼성 인터넷으로" : dev.inapp ? "다른 앱 안에서" : "Chrome이 아닌 브라우저로";
+    var why = dev.android
+      ? "NK근태는 Chrome에서 설치하고 등록해야 합니다. 삼성 인터넷 등으로 설치하면 Google Play 프로텍트가 앱을 막습니다."
+      : "여기서는 앱을 설치할 수 없고, 등록해도 앱에서는 다른 휴대폰으로 인식됩니다.";
     return h("div", { class: "inapp" },
-      h("b", { text: (dev.kakao ? "카카오톡" : "앱") + " 안에서 열려 있습니다" }),
-      h("span", { text: "여기서는 앱을 설치할 수 없고, 등록해도 앱에서는 다른 휴대폰으로 인식됩니다. 먼저 " + browser + "로 열어 주세요." }),
-      ext ? h("a", { class: "btn", href: ext }, browser + "로 열기")
+      h("b", { text: where + " 열려 있습니다" }),
+      h("span", { text: why + " 아래 버튼을 눌러 " + browser + " 여세요." }),
+      ext ? h("a", { class: "btn", href: ext }, browser + " 열기")
           : h("span", {}, "화면 오른쪽 아래(또는 위)의 ", key("⋯"), " 또는 ", key("공유", "share"), " 버튼을 누르고 ", key("Safari로 열기"), "를 누르세요."),
-      ext ? null : box);
+      ext ? null : h("div", { class: "urlbox", text: APP_URL }));
   }
 
   /* ---------- 동작 ---------- */
