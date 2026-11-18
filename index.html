@@ -239,7 +239,7 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
     } else {
       app.appendChild(punchView());
       if (!dev.inapp && !homeAdded()) app.appendChild(installButton());
-      app.appendChild(historyView());
+      app.appendChild(footerView());
     }
     if (state.sheet) app.appendChild(installSheet());
   }
@@ -305,25 +305,11 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
           : "출근·퇴근할 때 시각(서버 기준)과 현재 위치가 함께 기록됩니다." }));
   }
 
-  function historyView() {
-    var d = state.data, s = d.summary;
-    var ym = d.today.slice(0, 7);
-    return h("section", { class: "panel" },
-      h("h2", { text: Number(ym.slice(5)) + "월 근무 기록" }),
-      h("div", { class: "stats" },
-        stat("근무일", s.work + "일"), stat("총 근무", fmtMin(s.worked)), stat("연장", fmtMin(s.over)), stat("지각", s.late + "회"), stat("연차", s.leave + "일")),
-      d.month.length ? h("div", { class: "list" }, d.month.map(function (r) {
-        return h("div", { class: "day" },
-          h("span", { class: "d", text: dayLabel(r.date) }),
-          h("span", { class: "t", text: r.in ? r.in + " – " + (r.out || "") : r.kind }),
-          chip(r.status),
-          r.note ? h("span", { class: "note", text: r.note }) : null);
-      })) : h("div", { class: "empty", text: "이번 달 기록이 아직 없습니다." }),
-      h("div", { style: "display:flex;justify-content:center;gap:12px" },
-        h("button", { class: "btn ghost", onclick: refresh }, "새로 고침"),
-        !standalone() && homeAdded() && !dev.inapp ? h("button", { class: "btn ghost", onclick: openInstall }, "앱 설치 방법") : null));
+  function footerView() {
+    return h("div", { style: "display:flex;justify-content:center;gap:12px" },
+      h("button", { class: "btn ghost", onclick: refresh }, "새로 고침"),
+      !standalone() && homeAdded() && !dev.inapp ? h("button", { class: "btn ghost", onclick: openInstall }, "앱 설치 방법") : null);
   }
-  function stat(k, v) { return h("div", { class: "stat" }, h("div", { class: "k", text: k }), h("div", { class: "v", text: v })); }
 
   /* ---------- 앱 설치 ---------- */
   function installButton() {
