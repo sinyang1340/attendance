@@ -238,7 +238,7 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
       else app.appendChild(registerView());
     } else {
       app.appendChild(punchView());
-      if (!dev.inapp && !homeAdded()) app.appendChild(installButton());
+      if (showInstall()) app.appendChild(installButton());
       app.appendChild(footerView());
     }
     if (state.sheet) app.appendChild(installSheet());
@@ -307,15 +307,18 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
 
   function footerView() {
     return h("div", { style: "display:flex;justify-content:center;gap:12px" },
-      h("button", { class: "btn ghost", onclick: refresh }, "새로 고침"),
-      !standalone() && homeAdded() && !dev.inapp ? h("button", { class: "btn ghost", onclick: openInstall }, "앱 설치 방법") : null);
+      h("button", { class: "btn ghost", onclick: refresh }, "새로 고침"));
   }
 
   /* ---------- 앱 설치 ---------- */
+  /* 설치된 앱으로 열었을 때만 숨기고, 브라우저로 열었으면 휴대폰에서는 항상 보여 줌 */
+  function showInstall() {
+    return !dev.inapp && !standalone() && (dev.ios || dev.android || !!state.installPrompt);
+  }
   function installButton() {
     return h("button", { class: "install", onclick: openInstall },
       h("img", { src: "icons/icon-192.png", alt: "" }),
-      h("span", {}, state.installPrompt ? "앱 설치하기" : "홈 화면에 앱 추가", h("small", { text: "아이콘을 눌러 바로 출퇴근 · 주소창 없이 전체 화면" })));
+      h("span", {}, "NK근태 앱 설치", h("small", { text: state.installPrompt ? "누르면 바로 설치됩니다" : "누르면 설치 방법을 보여 드립니다" })));
   }
   function openInstall() {
     if (state.installPrompt) {
@@ -331,9 +334,11 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
 
   function iosSteps() {
     return [
-      [dev.iosOther ? "주소창 오른쪽의 " : "화면 맨 아래 가운데의 ", key("공유", "share"), " 버튼을 누르세요."],
-      ["목록을 아래로 내려 ", key("홈 화면에 추가", "plus"), "를 누르세요."],
-      ["이름을 ‘NK근태’으로 두고 오른쪽 위 ", key("추가"), "를 누르세요."]
+      dev.iosOther
+        ? ["주소창 오른쪽의 ", key("공유", "share"), " 버튼을 누르세요."]
+        : ["화면 아래의 ", key("⋯"), " 버튼을 누른 뒤 ", key("공유", "share"), "를 누르세요. 아래 가운데에 ", key("공유", "share"), " 버튼이 바로 보이면 그것을 누르세요."],
+      ["목록을 위로 밀어 ", key("홈 화면에 추가", "plus"), "를 누르세요. 안 보이면 맨 아래 ", key("더 보기"), "를 누르세요."],
+      [key("웹 앱으로 열기"), "가 켜져 있으면 그대로 두고, 오른쪽 위 ", key("추가"), "를 누르세요."]
     ];
   }
   function stepItem(s, i) { return h("li", {}, h("span", { class: "n", text: String(i + 1) }), h("span", {}, s)); }
@@ -342,23 +347,22 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
     var steps;
     if (dev.ios) steps = iosSteps();
     else if (dev.samsung) steps = [
-      ["화면 아래쪽 ", key("메뉴", "menu"), " 버튼을 누르세요."],
-      [key("현재 페이지 추가"), " → ", key("홈 화면"), "을 누르세요."],
+      ["주소창 오른쪽에 ", key("⤓ 설치"), " 아이콘이 보이면 누르고 ", key("설치"), "를 누르세요. 그러면 끝입니다."],
+      ["아이콘이 없으면 화면 아래쪽 ", key("메뉴", "menu"), " 버튼 → ", key("현재 페이지 추가"), " → ", key("홈 화면"), "을 누르세요."],
       [key("추가"), "를 누르세요."]];
     else if (dev.android) steps = [
       ["화면 오른쪽 위 ", key("", "dots"), " 버튼을 누르세요."],
-      [key("앱 설치"), " 또는 ", key("홈 화면에 추가"), "를 누르세요."],
-      [key("설치"), "를 누르세요. 앱 목록과 홈 화면에 ‘NK근태’이 생깁니다."]];
+      ["메뉴에서 ", key("앱 설치"), "를 누르세요. 없으면 ", key("홈 화면에 추가"), "를 누르세요."],
+      ["창이 뜨면 ", key("설치"), "를 고르세요. ", key("바로가기 만들기"), "가 아니라 ", key("설치"), "여야 앱 목록에도 생깁니다."]];
     else steps = [
       ["휴대폰에서 이 주소를 Safari(아이폰) 또는 Chrome(안드로이드)으로 여세요."],
       ["브라우저 메뉴에서 ", key("앱 설치"), " 또는 ", key("홈 화면에 추가"), "를 누르세요."]];
     var sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": "sheetTitle" },
       h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h2", { id: "sheetTitle", text: "NK근태 앱 설치하기" })),
       h("ol", { class: "steps" }, steps.map(stepItem)),
-      h("p", { class: "muted small", style: "margin:0", text: "설치하면 홈 화면의 ‘NK근태’ 아이콘으로 주소창 없이 바로 열립니다." }),
+      h("p", { class: "muted small", style: "margin:0", text: "설치하면 홈 화면의 ‘NK근태’ 아이콘으로 주소창 없이 바로 열립니다. 이미 설치했다면 홈 화면이나 앱 목록에서 ‘NK근태’를 찾아 여세요." }),
       h("div", { class: "row" },
-        h("button", { class: "btn line", onclick: closeSheet }, "닫기"),
-        h("button", { class: "btn", onclick: function () { setHomeAdded(); closeSheet(); toast("다음부터는 홈 화면의 ‘NK근태’ 아이콘으로 여세요."); } }, "설치했어요")));
+        h("button", { class: "btn", onclick: function () { setHomeAdded(); closeSheet(); } }, "확인")));
     return h("div", { class: "sheet-bg", onclick: function (e) { if (e.target === e.currentTarget) closeSheet(); } }, sheet);
   }
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && state.sheet) closeSheet(); });
