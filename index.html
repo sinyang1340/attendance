@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NK근태</title>
+<meta name="theme-color" content="#1f5f4a">
+<meta name="description" content="출근·퇴근 기록">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="NK근태">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="config.js"></script>
+<style>
+:root {
+  --bg: #f3f4f1; --surface: #ffffff; --sunken: #e9ebe6; --line: #d6d9d1;
+  --fg: #1d221f; --muted: #5d665f; --accent: #1f5f4a; --accent-fg: #ffffff; --accent-soft: #dcebe4;
+  --late: #b4441f; --late-soft: #f6e3da; --leave: #2e5a8c; --leave-soft: #dfe8f3;
+  --ok: #2c7a4b; --ok-soft: #dcefe2; --warn: #8a6410; --warn-soft: #f4ead2;
+  --num: ui-monospace, "SF Mono", "Roboto Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141816; --surface: #1c211e; --sunken: #232925; --line: #333b36;
+    --fg: #e6eae6; --muted: #9aa49d; --accent: #5fbf98; --accent-fg: #0d1a14; --accent-soft: #1f3a2f;
+    --late: #f08a62; --late-soft: #3d2419; --leave: #86b2e6; --leave-soft: #1d2b3d;
+    --ok: #74cf98; --ok-soft: #1b3324; --warn: #e2bc5c; --warn-soft: #3a3018;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  font-size: 15px; line-height: 1.5; -webkit-text-size-adjust: 100%;
+  padding: calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.wrap { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 19px; margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.who { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.clock { text-align: center; }
+.clock .date { color: var(--muted); font-size: 14px; }
+.clock .time { font-family: var(--num); font-size: clamp(44px, 14vw, 62px); font-weight: 600; letter-spacing: -1px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.punch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.punch { border: 0; border-radius: 12px; padding: 20px 8px; font: inherit; font-size: 19px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; -webkit-tap-highlight-color: transparent; }
+.punch .sub { font-size: 13px; font-weight: 500; opacity: .85; font-family: var(--num); }
+.punch.in { background: var(--accent); color: var(--accent-fg); }
+.punch.out { background: var(--fg); color: var(--bg); }
+.punch:disabled { background: var(--sunken); color: var(--muted); cursor: default; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.today { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--sunken); color: var(--muted); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.late { background: var(--late-soft); color: var(--late); }
+.chip.leave { background: var(--leave-soft); color: var(--leave); }
+.chip.work { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.stat { background: var(--sunken); border-radius: 10px; padding: 9px 11px; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-family: var(--num); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.list { display: flex; flex-direction: column; }
+.day { display: grid; grid-template-columns: 70px 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.day:last-child { border-bottom: 0; }
+.day .d { font-weight: 600; font-size: 14px; }
+.day .t { font-family: var(--num); font-size: 14px; font-variant-numeric: tabular-nums; }
+.day .note { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); }
+label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); width: 100%; letter-spacing: 1px; }
+.btn { border: 0; border-radius: 10px; padding: 14px; font: inherit; font-size: 16px; font-weight: 700; background: var(--accent); color: var(--accent-fg); cursor: pointer; text-align: center; text-decoration: none; display: block; }
+.btn:disabled { opacity: .5; }
+.btn.line { background: var(--sunken); color: var(--fg); }
+.btn.ghost { background: transparent; color: var(--muted); font-weight: 500; font-size: 14px; padding: 6px; display: inline-block; }
+.notice { background: var(--late-soft); color: var(--late); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+.empty { text-align: center; color: var(--muted); font-size: 14px; padding: 16px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; max-width: calc(100% - 32px); text-align: center; z-index: 30; }
+.confirm { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px; font-size: 14px; }
+.confirm button { border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; font-weight: 700; background: var(--fg); color: var(--bg); }
+.confirm button.no { background: transparent; color: var(--warn); }
+.install { display: flex; align-items: center; gap: 10px; border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 12px; padding: 12px 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; text-align: left; }
+.install img { flex: none; width: 36px; height: 36px; border-radius: 9px; }
+.install small { display: block; font-weight: 500; font-size: 12.5px; opacity: .85; }
+.inapp { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.inapp b { font-size: 15px; }
+.inapp .btn { background: var(--warn); color: var(--surface); }
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--surface); color: var(--fg); width: 100%; max-width: 480px; border-radius: 18px 18px 0 0; padding: 20px max(18px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 14px; max-height: 88vh; overflow-y: auto; }
+.sheet h2 { font-size: 18px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; font-size: 15px; }
+.steps .n { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.key { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunken); font-weight: 700; white-space: nowrap; }
+.key svg { width: 15px; height: 15px; }
+.urlbox { font-family: var(--num); font-size: 12px; background: var(--sunken); border-radius: 8px; padding: 8px 10px; word-break: break-all; user-select: all; -webkit-user-select: all; }
+.row { display: flex; gap: 8px; }
+.row .btn { flex: 1; }
+.applogo { display: flex; align-items: center; gap: 10px; }
+.applogo img { width: 40px; height: 40px; border-radius: 10px; }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: up .2s ease-out; } @keyframes up { from { transform: translateY(30px); opacity: .6; } } }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <section class="panel"><div class="empty">불러오는 중…</div></section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var API = String(window.ATT_API_URL || "");
+  var KEY = "att_device_code";
+  var HOME_KEY = "att_home_added";
+  var WD = ["일", "월", "화", "수", "목", "금", "토"];
+  var app = document.getElementById("app");
+  var state = { data: null, busy: false, locating: false, error: "", confirmOut: false, offset: 0, sheet: false, skipInstall: false, installPrompt: null };
+
+  /* ---------- 기기·브라우저 ---------- */
+  var ua = navigator.userAgent || "";
+  var dev = {
+    ios: /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+    android: /Android/i.test(ua),
+    kakao: /KAKAOTALK/i.test(ua),
+    inapp: /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|BAND\/|everytimeApp/i.test(ua),
+    samsung: /SamsungBrowser/i.test(ua),
+    iosOther: /CriOS|EdgiOS|FxiOS|Whale/i.test(ua)
+  };
+  function standalone() {
+    return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  }
+  var APP_URL = location.origin + location.pathname.replace(/index\.html$/, "");
+  function homeAdded() { if (standalone()) return true; try { return localStorage.getItem(HOME_KEY) === "1"; } catch (e) { return false; } }
+  function setHomeAdded() { try { localStorage.setItem(HOME_KEY, "1"); } catch (e) {} }
+  // 아이폰은 홈 화면 앱과 Safari가 저장 공간을 따로 써서, 홈 화면 앱 안에서 등록해야 함
+  function iosMustInstallFirst() { return dev.ios && !standalone() && !dev.inapp && !state.skipInstall; }
+
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); state.installPrompt = e; render(); });
+  window.addEventListener("appinstalled", function () { setHomeAdded(); state.installPrompt = null; state.sheet = false; toast("설치했습니다. 홈 화면의 ‘NK근태’ 아이콘으로 여세요."); render(); });
+
+  /* ---------- 기기 코드 ---------- */
+  function deviceCode() {
+    try {
+      var t = localStorage.getItem(KEY);
+      if (!t) {
+        if (window.crypto && crypto.randomUUID) t = crypto.randomUUID();
+        else { var a = new Uint8Array(16); crypto.getRandomValues(a); t = Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join(""); }
+        localStorage.setItem(KEY, t);
+      }
+      return localStorage.getItem(KEY) === t ? t : null;
+    } catch (e) { return null; }
+  }
+
+  /* ---------- 서버 호출 (구글 Apps Script) ---------- */
+  function call(fn, args) {
+    if (!/^https:\/\/script\.google\.com\//.test(API)) return Promise.reject(new Error("앱 설정이 끝나지 않았습니다. 관리자에게 config.js의 웹앱 주소를 확인해 달라고 하세요."));
+    return fetch(API, {
+      method: "POST", redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ fn: fn, args: args || [] })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("서버 응답이 없습니다. (" + r.status + ")");
+      return r.json();
+    }, function () {
+      throw new Error("인터넷에 연결되어 있지 않습니다. 연결을 확인하고 다시 눌러 주세요.");
+    }).then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || "오류가 났습니다.");
+      return res.data;
+    });
+  }
+  function errMsg(e) { return String((e && e.message) || e || "오류가 났습니다.").replace(/^Error:\s*/, ""); }
+
+  /* ---------- 도우미 ---------- */
+  function pad(n) { return ("0" + n).slice(-2); }
+  function fmtMin(m) { return Math.floor(m / 60) + ":" + pad(m % 60); }
+  function now() { return new Date(Date.now() + state.offset); }
+  function dayLabel(ds) { var d = new Date(ds + "T00:00:00"); return Number(ds.slice(5, 7)) + "/" + Number(ds.slice(8)) + " (" + WD[d.getDay()] + ")"; }
+  function h(tag, attrs) {
+    var e = document.createElement(tag), kids = Array.prototype.slice.call(arguments, 2);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k.indexOf("on") === 0) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    });
+    (function add(list) { list.forEach(function (k) { if (k == null || k === false) return; if (Array.isArray(k)) add(k); else e.appendChild(k.nodeType ? k : document.createTextNode(String(k))); }); })(kids);
+    return e;
+  }
+  var tt;
+  function toast(msg) { var t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(tt); tt = setTimeout(function () { t.hidden = true; }, 2800); }
+  function chip(status) {
+    var cls = "chip";
+    if (["연차", "병가", "결근", "출장", "재택", "반차"].indexOf(status) >= 0) cls += " leave";
+    else if (status === "정상") cls += " ok";
+    else if (status && status.indexOf("근무중") === 0) cls += status.indexOf("지각") > 0 ? " late" : " work";
+    else if (status === "퇴근 미기록" || status === "출근 기록 없음" || status === "자동 퇴근") cls += " warn";
+    else if (status) cls += " late";
+    return h("span", { class: cls, text: status || "미출근" });
+  }
+  var SVG = {
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
+  };
+  function key(label, icon) {
+    var s = document.createElement("span");
+    s.className = "key";
+    if (icon) s.innerHTML = SVG[icon];
+    s.appendChild(document.createTextNode(label));
+    return s;
+  }
+
+  /* ---------- 화면 ---------- */
+  function render() {
+    app.innerHTML = "";
+    if (state.error === "nostorage") {
+      app.appendChild(h("section", { class: "panel" }, h("h1", { text: "이 브라우저에서는 쓸 수 없습니다" }),
+        h("p", { class: "muted", text: "이 휴대폰을 기억할 수 없는 상태입니다. 시크릿(비공개) 모드를 끄거나, Chrome 또는 Safari에서 다시 열어 주세요." })));
+      return;
+    }
+    if (dev.inapp) app.appendChild(inAppBox());
+    if (!state.loaded) {
+      app.appendChild(h("section", { class: "panel" }, h("div", { class: "empty", text: "불러오는 중…" })));
+    } else if (!state.data) {
+      if (iosMustInstallFirst()) app.appendChild(iosInstallFirst());
+      else app.appendChild(registerView());
+    } else {
+      app.appendChild(punchView());
+      if (!dev.inapp && !homeAdded()) app.appendChild(installButton());
+      app.appendChild(historyView());
+    }
+    if (state.sheet) app.appendChild(installSheet());
+  }
+
+  function registerView() {
+    var input = h("input", { id: "phone", type: "tel", inputmode: "numeric", autocomplete: "tel", placeholder: "010-0000-0000" });
+    var form = h("form", { class: "panel", onsubmit: function (e) {
+      e.preventDefault();
+      if (state.busy) return;
+      var code = deviceCode();
+      if (!code) { state.error = "nostorage"; render(); return; }
+      state.busy = true; state.error = ""; render();
+      call("register", [input.value, code]).then(function (d) {
+        state.busy = false;
+        if (!dev.inapp && !homeAdded()) state.sheet = true;
+        setData(d); toast(d.name + "님, 등록되었습니다.");
+      }).catch(function (err) {
+        state.busy = false; state.error = errMsg(err); render();
+        var p = document.getElementById("phone"); if (p) { p.value = input.value; p.focus(); }
+      });
+    } },
+      h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h1", { text: "NK근태 시작하기" })),
+      h("p", { class: "muted small", style: "margin:0", text: "관리자에게 등록한 본인 전화번호를 입력하세요. 처음 한 번만 하면 되고, 이후에는 이 휴대폰에서만 출퇴근을 기록할 수 있습니다." }),
+      h("label", { for: "phone" }, "전화번호", input),
+      state.error && state.error !== "nostorage" ? h("div", { class: "notice", text: state.error }) : null,
+      h("button", { class: "btn", type: "submit", disabled: state.busy }, state.busy ? "확인 중…" : "이 휴대폰으로 시작하기"));
+    setTimeout(function () { var p = document.getElementById("phone"); if (p && !p.value && standalone()) p.focus(); }, 0);
+    return form;
+  }
+
+  function iosInstallFirst() {
+    return h("section", { class: "panel" },
+      h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h1", { text: "먼저 홈 화면에 앱을 추가하세요" })),
+      h("p", { class: "muted", style: "margin:0", text: "아이폰은 홈 화면에 추가한 ‘NK근태’ 앱 안에서 전화번호를 등록해야 합니다. 여기(Safari)에서 등록하면 앱에서는 다른 휴대폰으로 인식됩니다." }),
+      h("ol", { class: "steps" }, iosSteps().map(stepItem)),
+      h("p", { class: "muted small", style: "margin:0", text: "추가한 뒤 이 화면은 닫고, 홈 화면의 ‘NK근태’ 아이콘을 눌러 여세요." }),
+      h("button", { class: "btn ghost", onclick: function () { state.skipInstall = true; render(); } }, "앱 없이 이 브라우저에서 쓰기"));
+  }
+
+  function punchView() {
+    var d = state.data, rec = d.todayRec, n = now();
+    var hasIn = rec && rec.in, hasOut = rec && rec.out;
+    return h("section", { class: "panel" },
+      h("div", { class: "who" }, h("h1", { text: d.name + "님" }), h("span", { class: "muted small", text: d.dept || "" })),
+      h("div", { class: "clock" },
+        h("div", { class: "date", id: "cDate", text: n.getFullYear() + "년 " + (n.getMonth() + 1) + "월 " + n.getDate() + "일 " + WD[n.getDay()] + "요일" }),
+        h("div", { class: "time", id: "cTime", text: pad(n.getHours()) + ":" + pad(n.getMinutes()) + ":" + pad(n.getSeconds()) })),
+      h("div", { class: "punch-row" },
+        h("button", { class: "punch in", disabled: state.busy || hasIn, onclick: function () { punch("in"); } },
+          "출근", h("span", { class: "sub", text: hasIn ? rec.in : "기준 " + d.settings.start })),
+        h("button", { class: "punch out", disabled: state.busy || !hasIn, onclick: function () {
+          if (hasOut) { state.confirmOut = true; render(); } else punch("out");
+        } }, hasOut ? "퇴근 다시" : "퇴근", h("span", { class: "sub", text: hasOut ? rec.out : "기준 " + d.settings.end }))),
+      state.confirmOut ? h("div", { class: "confirm" }, "이미 " + rec.out + "에 퇴근했습니다. 지금 시각으로 바꿀까요?",
+        h("button", { onclick: function () { state.confirmOut = false; punch("out"); } }, "바꾸기"),
+        h("button", { class: "no", onclick: function () { state.confirmOut = false; render(); } }, "취소")) : null,
+      h("div", { class: "today" }, h("span", { class: "muted", text: "오늘" }), chip(rec ? rec.status : ""),
+        rec && rec.out && rec.worked ? h("span", { style: "font-family:var(--num)", text: "근무 " + fmtMin(rec.worked) }) : null),
+      h("p", { class: "muted small", style: "margin:0;text-align:center", text:
+        state.locating ? "위치를 확인하는 중입니다… 위치 권한을 물으면 ‘허용’을 눌러 주세요."
+        : hasIn && !hasOut && d.settings.autoOut && rec.in < d.settings.autoOut
+          ? "퇴근을 누르지 않으면 " + d.settings.autoOut + "에 자동으로 퇴근 처리됩니다. 더 일한 날은 끝날 때 ‘퇴근 다시’를 누르세요."
+          : "출근·퇴근할 때 시각(서버 기준)과 현재 위치가 함께 기록됩니다." }));
+  }
+
+  function historyView() {
+    var d = state.data, s = d.summary;
+    var ym = d.today.slice(0, 7);
+    return h("section", { class: "panel" },
+      h("h2", { text: Number(ym.slice(5)) + "월 근무 기록" }),
+      h("div", { class: "stats" },
+        stat("근무일", s.work + "일"), stat("총 근무", fmtMin(s.worked)), stat("연장", fmtMin(s.over)), stat("지각", s.late + "회"), stat("연차", s.leave + "일")),
+      d.month.length ? h("div", { class: "list" }, d.month.map(function (r) {
+        return h("div", { class: "day" },
+          h("span", { class: "d", text: dayLabel(r.date) }),
+          h("span", { class: "t", text: r.in ? r.in + " – " + (r.out || "") : r.kind }),
+          chip(r.status),
+          r.note ? h("span", { class: "note", text: r.note }) : null);
+      })) : h("div", { class: "empty", text: "이번 달 기록이 아직 없습니다." }),
+      h("div", { style: "display:flex;justify-content:center;gap:12px" },
+        h("button", { class: "btn ghost", onclick: refresh }, "새로 고침"),
+        !standalone() && homeAdded() && !dev.inapp ? h("button", { class: "btn ghost", onclick: openInstall }, "앱 설치 방법") : null));
+  }
+  function stat(k, v) { return h("div", { class: "stat" }, h("div", { class: "k", text: k }), h("div", { class: "v", text: v })); }
+
+  /* ---------- 앱 설치 ---------- */
+  function installButton() {
+    return h("button", { class: "install", onclick: openInstall },
+      h("img", { src: "icons/icon-192.png", alt: "" }),
+      h("span", {}, state.installPrompt ? "앱 설치하기" : "홈 화면에 앱 추가", h("small", { text: "아이콘을 눌러 바로 출퇴근 · 주소창 없이 전체 화면" })));
+  }
+  function openInstall() {
+    if (state.installPrompt) {
+      var p = state.installPrompt;
+      state.installPrompt = null;
+      p.prompt();
+      p.userChoice.then(function (c) { if (c && c.outcome === "accepted") setHomeAdded(); render(); }).catch(function () {});
+      return;
+    }
+    state.sheet = true; render();
+  }
+  function closeSheet() { state.sheet = false; render(); }
+
+  function iosSteps() {
+    return [
+      [dev.iosOther ? "주소창 오른쪽의 " : "화면 맨 아래 가운데의 ", key("공유", "share"), " 버튼을 누르세요."],
+      ["목록을 아래로 내려 ", key("홈 화면에 추가", "plus"), "를 누르세요."],
+      ["이름을 ‘NK근태’으로 두고 오른쪽 위 ", key("추가"), "를 누르세요."]
+    ];
+  }
+  function stepItem(s, i) { return h("li", {}, h("span", { class: "n", text: String(i + 1) }), h("span", {}, s)); }
+
+  function installSheet() {
+    var steps;
+    if (dev.ios) steps = iosSteps();
+    else if (dev.samsung) steps = [
+      ["화면 아래쪽 ", key("메뉴", "menu"), " 버튼을 누르세요."],
+      [key("현재 페이지 추가"), " → ", key("홈 화면"), "을 누르세요."],
+      [key("추가"), "를 누르세요."]];
+    else if (dev.android) steps = [
+      ["화면 오른쪽 위 ", key("", "dots"), " 버튼을 누르세요."],
+      [key("앱 설치"), " 또는 ", key("홈 화면에 추가"), "를 누르세요."],
+      [key("설치"), "를 누르세요. 앱 목록과 홈 화면에 ‘NK근태’이 생깁니다."]];
+    else steps = [
+      ["휴대폰에서 이 주소를 Safari(아이폰) 또는 Chrome(안드로이드)으로 여세요."],
+      ["브라우저 메뉴에서 ", key("앱 설치"), " 또는 ", key("홈 화면에 추가"), "를 누르세요."]];
+    var sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": "sheetTitle" },
+      h("div", { class: "applogo" }, h("img", { src: "icons/icon-192.png", alt: "" }), h("h2", { id: "sheetTitle", text: "NK근태 앱 설치하기" })),
+      h("ol", { class: "steps" }, steps.map(stepItem)),
+      h("p", { class: "muted small", style: "margin:0", text: "설치하면 홈 화면의 ‘NK근태’ 아이콘으로 주소창 없이 바로 열립니다." }),
+      h("div", { class: "row" },
+        h("button", { class: "btn line", onclick: closeSheet }, "닫기"),
+        h("button", { class: "btn", onclick: function () { setHomeAdded(); closeSheet(); toast("다음부터는 홈 화면의 ‘NK근태’ 아이콘으로 여세요."); } }, "설치했어요")));
+    return h("div", { class: "sheet-bg", onclick: function (e) { if (e.target === e.currentTarget) closeSheet(); } }, sheet);
+  }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && state.sheet) closeSheet(); });
+
+  function inAppBox() {
+    var ext = dev.kakao ? "kakaotalk://web/openExternal?url=" + encodeURIComponent(APP_URL)
+      : dev.android ? "intent://" + APP_URL.replace(/^https?:\/\//, "") + "#Intent;scheme=https;package=com.android.chrome;end" : "";
+    var browser = dev.ios ? "Safari" : "Chrome";
+    var box = h("div", { class: "urlbox", text: APP_URL });
+    return h("div", { class: "inapp" },
+      h("b", { text: (dev.kakao ? "카카오톡" : "앱") + " 안에서 열려 있습니다" }),
+      h("span", { text: "여기서는 앱을 설치할 수 없고, 등록해도 앱에서는 다른 휴대폰으로 인식됩니다. 먼저 " + browser + "로 열어 주세요." }),
+      ext ? h("a", { class: "btn", href: ext }, browser + "로 열기")
+          : h("span", {}, "화면 오른쪽 아래(또는 위)의 ", key("⋯"), " 또는 ", key("공유", "share"), " 버튼을 누르고 ", key("Safari로 열기"), "를 누르세요."),
+      ext ? null : box);
+  }
+
+  /* ---------- 동작 ---------- */
+  function setData(d) {
+    state.data = d;
+    if (d && d.serverTime) state.offset = new Date(d.serverTime + "+09:00").getTime() - Date.now();
+    render();
+  }
+
+  function getLocation() {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res({ error: "위치 기능 미지원" });
+      var done = false;
+      var guard = setTimeout(function () { if (!done) { done = true; res({ error: "시간 초과" }); } }, 12000);
+      navigator.geolocation.getCurrentPosition(function (p) {
+        if (done) return; done = true; clearTimeout(guard);
+        res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy });
+      }, function (err) {
+        if (done) return; done = true; clearTimeout(guard);
+        res({ error: err.code === 1 ? "권한 거부" : err.code === 3 ? "시간 초과" : "확인 실패" });
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+    });
+  }
+
+  function punch(type) {
+    if (state.busy) return;
+    state.busy = true; state.locating = true; render();
+    getLocation().then(function (loc) {
+      state.locating = false; render();
+      return call("punch", [deviceCode(), type, loc]).then(function (d) {
+        state.busy = false; setData(d);
+        toast(d.message + (loc.error ? " (위치: " + loc.error + ")" : " · 위치 기록됨"));
+      });
+    }).catch(function (e) {
+      state.busy = false; state.locating = false; render(); toast(errMsg(e));
+    });
+  }
+
+  function refresh() {
+    var code = deviceCode();
+    if (!code) { state.error = "nostorage"; render(); return; }
+    call("status", [code]).then(function (d) {
+      if (!d && state.data) toast("이 휴대폰 등록이 해제되었습니다. 전화번호를 다시 입력하세요.");
+      state.error = ""; state.loaded = true;
+      setData(d);
+    }).catch(function (e) {
+      if (state.data) { toast(errMsg(e)); return; }
+      state.loaded = true; state.error = errMsg(e); render();
+    });
+  }
+
+  setInterval(function () {
+    var t = document.getElementById("cTime"), dEl = document.getElementById("cDate");
+    if (!t) return;
+    var n = now();
+    t.textContent = pad(n.getHours()) + ":" + pad(n.getMinutes()) + ":" + pad(n.getSeconds());
+    dEl.textContent = n.getFullYear() + "년 " + (n.getMonth() + 1) + "월 " + n.getDate() + "일 " + WD[n.getDay()] + "요일";
+    if (state.data && n.getHours() === 0 && n.getMinutes() === 0 && n.getSeconds() === 5) refresh();
+  }, 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && state.data) refresh(); });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+
+  render();
+  refresh();
+})();
+</script>
+</body>
+</html>
