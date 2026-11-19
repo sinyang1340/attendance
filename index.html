@@ -530,8 +530,18 @@ input { font: inherit; font-size: 20px; font-family: var(--num); padding: 12px; 
   }, 1000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && state.data) refresh(); });
 
+  /* 새 버전을 올리면 앱을 열 때 자동으로 확인하고, 바뀌었으면 화면을 한 번 새로 고침 */
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+    var hadController = !!navigator.serviceWorker.controller, reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!hadController || reloaded) return;
+      reloaded = true; location.reload();
+    });
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) reg.update().catch(function () {}); });
+      }).catch(function () {});
+    });
   }
 
   render();

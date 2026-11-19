@@ -2,7 +2,7 @@
 // 출퇴근 기록(구글 서버로 보내는 요청)은 저장하지 않고 항상 인터넷으로 보냅니다.
 // 인터넷이 될 때는 항상 새 파일을 받아 오므로, 화면을 고쳐 올리면 다음에 열 때 반영됩니다.
 // 저장해 둔 파일 목록을 바꿨다면 아래 버전 이름을 바꿔 주세요.
-const VERSION = "att-v3";
+const VERSION = "att-v4";
 const FILES = ["./", "./index.html", "./config.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 
@@ -20,8 +20,9 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return; // 구글 서버 요청은 건드리지 않음
   // 화면 파일: 인터넷이 되면 새로 받고, 안 되면 저장해 둔 것을 씀
+  // cache: "no-cache" → 휴대폰·GitHub에 저장된 옛 파일 대신 항상 최신 파일인지 확인하고 받음
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(new Request(e.request.url, { cache: "no-cache", credentials: "same-origin" })).then((res) => {
       const copy = res.clone();
       caches.open(VERSION).then((c) => c.put(e.request, copy));
       return res;
